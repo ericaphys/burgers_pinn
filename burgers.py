@@ -5,7 +5,9 @@ from torch.utils.data import DataLoader
 from torch.utils.data import TensorDataset
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
-from numba import jit
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.animation as FuncAnimation
 
 
 #MLP with pytorch
@@ -118,8 +120,8 @@ def main():
             #nan mask -> using it returns true where there isnt a nan in u_batch
             mask=~torch.isnan(u_batch.squeeze())
             if epoch==(epochs-1):
-                burgers.append(pred[~mask])
-                plot_x.append(x_batch[~mask])
+                burgers.append(pred[~mask].detach().cpu())
+                plot_x.append(x_batch[~mask].detach().cpu())
             if mask.any():
                 loss=loss_fn(pred[mask], u_batch[mask])
             else:
@@ -146,9 +148,49 @@ def main():
         print(f"Epoch: {epoch+1}/{epochs}\ntot loss : {losses[epoch]:.5f}\n phys loss : {p_losses[epoch]:.5f}\n----------------------------\n")
         scheduler.step()
 
-    burgers=burgers.detach().numpy()
-    plot_x=plot_x.detach().numpy()
-    data=np.column_stack((plot_x, burgers))
+    burgers=torch.cat(burgers).numpy()
+    plot_x=torch.cat(plot_x).numpy()
+    burgers=burgers.flatten()
+
+    #ordering for time
+    x_data=plot_x[:,0]
+    t_data=plot_x[:,1]
+
+    frames=50
+    time_steps=np.linspace(0,1,frames)
+    #tolerance for t value
+    tol=1/frames
+
+    fig, ax=plt.subplots()
+    line=ax.plot([],[], lw=2)
+    ax.set_xlim(-1,1)
+    ax.set_ylim(burgers.min()-0.1, burgers.max()+0.1)
+    ax.set_xlabel('x')
+    ax.set_ylabel('velocity')
+
+    def init():
+        line.set_data([],[])
+        return line,
+
+    def update(t_val):
+        time_mask=np.abs(t_data-t_val)<tol
+
+        if np.any(mask):
+            x_frame=x_data[mask]
+            u_frame=burgers[mask]
+
+            #sorting
+            idx=np.argsort(x_frame)
+            line.set_data(x_frame[idx], u_frame[idx])
+        return line
+    ani=FuncAnimation(fig, update, frames=time_steps, init_func=init, blit=True)
+
+    ani.save('plot.mp4', fps=15)
+
+    plt.close(fig)
+    
+    
+    data=np.column_stack((plot_x[:,0], burgers))
     with open('output.txt', 'a') as f:
         np.savetxt(f,data)
 
