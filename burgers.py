@@ -104,6 +104,7 @@ def main():
     loss_fn=nn.MSELoss()
 
     optimizer=torch.optim.Adam(model.parameters(), lr=eta)
+    optimizer2=torch.optim.LBFGS(model.parameters(), lr=eta, max_iter=20)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
 
     #-----MLP-----
@@ -142,7 +143,6 @@ def main():
             
             loss.backward()
             optimizer.step()
-            
 
             losses[epoch] += loss.item()*u_batch.size(0)
             p_losses[epoch] += phy_loss.item()*u_batch.size(0)
