@@ -13,11 +13,17 @@ class Model(nn.Module):
     def __init__(self, input_size, hidden_size):
         super().__init__()
         self.layer1=nn.Linear(input_size, hidden_size)
-        self.layer2=nn.Linear(hidden_size, 1)
+        self.layer2=nn.Linear(hidden_size, hidden_size)
+        self.layer3=nn.Linear(hidden_size, hidden_size)
+        self.layer4=nn.Linear(hidden_size,1)
 
     def forward(self, x):
         x=torch.tanh(self.layer1(x))
         x=self.layer2(x)
+        x=torch.tanh(self.layer2(x))
+        x=self.layer3(x)
+        x=torch.tanh(self.layer3(x))
+        x=self.layer4(x)
 
         return x
     
@@ -92,11 +98,11 @@ def main():
 
     loss_fn=nn.MSELoss()
 
-    optimizer=torch.optim.Adam(model.parameters(), lr=eta)
+    optimizer=torch.optim.LBFGS(model.parameters(), lr=eta, max_iter=20)
 
     #-----MLP-----
     losses=np.zeros(epochs, dtype=np.float32)
-    lambda_data=100.0
+    lambda_data=1000.0
     lambda_phy=1.0
     p_losses=np.zeros(epochs, dtype=np.float32)
     for epoch in range(epochs):
@@ -109,15 +115,21 @@ def main():
             #nan mask
             mask=~torch.isnan(u_batch.squeeze())
             
-            loss=loss_fn(pred[mask], u_batch[mask])
+            if mask.any():
+                loss=loss_fn(pred[mask], u_batch[mask])
+            else:
+                loss=torch.tensor(0.0, device=device)
             
             #---- automatic differentiation ----
             derivatives = torch.autograd.grad(pred, x_batch, grad_outputs=torch.ones_like(pred),  create_graph=True)[0]
             du_dx=derivatives[:,0]
+            du_dx=du_dx[~mask]
             du_dt=derivatives[:,1]
+            du_dt=du_dt[~mask]
             pred=pred.squeeze()
             phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
             loss=lambda_data*loss+lambda_phy*phy_loss
+            
             loss.backward()
             optimizer.step()
             
