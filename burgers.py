@@ -6,8 +6,8 @@ from torch.utils.data import TensorDataset
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use('Agg')
-import matplotlib.animation as FuncAnimation
+#matplotlib.use('Agg')
+import matplotlib.animation as animation
 
 
 #MLP with pytorch
@@ -50,7 +50,8 @@ def main():
     x_t_in=np.zeros((Ni,2))
     x_t_in[:,0]=rng.uniform(-1,1,size=Ni)
     x_t_in[:,1]=0
-    u_in=np.sin(np.pi*x_t_in[:,0])
+    #the minus sign makes the waves bump into eachother
+    u_in=-np.sin(np.pi*x_t_in[:,0])
     
 
     #boundary conditions 25 ti for x=-1 and 25 ti for x=1
@@ -67,7 +68,9 @@ def main():
 
     #initialization of N random tuples (x,t) normally distributed
     N=10000
-    x_t_tuple=rng.normal(loc=0.0, scale=0.1, size=(N, 2)).astype(np.float32)
+    x_t_tuple=np.zeros((N,2), dtype=np.float32)
+    x_t_tuple[:,0]=rng.uniform(-1,1,size=N)
+    x_t_tuple[:,1]=rng.uniform(0,1,size=N)
     u_tuple=np.empty(N)
     u_tuple[:]=np.nan
     u_tuple=u_tuple.astype(np.float32)
@@ -93,7 +96,7 @@ def main():
     input_size=2
     hidden_size=100
     eta=0.001
-    epochs=1000
+    epochs=10000
 
     model=Model(input_size, hidden_size)
     model.to(device)
@@ -101,7 +104,7 @@ def main():
     loss_fn=nn.MSELoss()
 
     optimizer=torch.optim.Adam(model.parameters(), lr=eta)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
 
     #-----MLP-----
     losses=np.zeros(epochs, dtype=np.float32)
@@ -162,30 +165,27 @@ def main():
     tol=1/frames
 
     fig, ax=plt.subplots()
-    line=ax.plot([],[], lw=2)
+    line, =ax.plot([],[], lw=2)
     ax.set_xlim(-1,1)
     ax.set_ylim(burgers.min()-0.1, burgers.max()+0.1)
     ax.set_xlabel('x')
     ax.set_ylabel('velocity')
 
-    def init():
-        line.set_data([],[])
-        return line,
 
     def update(t_val):
         time_mask=np.abs(t_data-t_val)<tol
 
-        if np.any(mask):
-            x_frame=x_data[mask]
-            u_frame=burgers[mask]
+        if np.any(time_mask):
+            x_frame=x_data[time_mask]
+            u_frame=burgers[time_mask]
 
             #sorting
             idx=np.argsort(x_frame)
             line.set_data(x_frame[idx], u_frame[idx])
-        return line
-    ani=FuncAnimation(fig, update, frames=time_steps, init_func=init, blit=True)
+        return line,
+    ani=animation.FuncAnimation(fig, update, frames=time_steps, blit=True)
 
-    ani.save('plot.mp4', fps=15)
+    ani.save('plot.gif', fps=15)
 
     plt.close(fig)
     
