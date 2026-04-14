@@ -91,30 +91,35 @@ def main():
     input_size=2
     hidden_size=100
     eta=0.001
-    epochs=50
+    epochs=1000
 
     model=Model(input_size, hidden_size)
     model.to(device)
 
     loss_fn=nn.MSELoss()
 
-    optimizer=torch.optim.LBFGS(model.parameters(), lr=eta, max_iter=20)
+    optimizer=torch.optim.Adam(model.parameters(), lr=eta)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
 
     #-----MLP-----
     losses=np.zeros(epochs, dtype=np.float32)
     lambda_data=1000.0
     lambda_phy=1.0
     p_losses=np.zeros(epochs, dtype=np.float32)
+    burgers=[]
+    plot_x=[]
     for epoch in range(epochs):
         for x_batch, u_batch in train_dl:
             optimizer.zero_grad()
             u_batch=u_batch.reshape(-1,1)
             x_batch, u_batch = x_batch.to(device).requires_grad_(), u_batch.to(device)
             pred=model(x_batch)
-
-            #nan mask
-            mask=~torch.isnan(u_batch.squeeze())
             
+            #nan mask -> using it returns true where there isnt a nan in u_batch
+            mask=~torch.isnan(u_batch.squeeze())
+            if epoch==(epochs-1):
+                burgers.append(pred[~mask])
+                plot_x.append(x_batch[~mask])
             if mask.any():
                 loss=loss_fn(pred[mask], u_batch[mask])
             else:
@@ -139,9 +144,13 @@ def main():
         losses[epoch] /= len(train_dl.dataset)
         p_losses[epoch] /= len(train_dl.dataset)
         print(f"Epoch: {epoch+1}/{epochs}\ntot loss : {losses[epoch]:.5f}\n phys loss : {p_losses[epoch]:.5f}\n----------------------------\n")
+        scheduler.step()
 
-
-
+    burgers=burgers.detach().numpy()
+    plot_x=plot_x.detach().numpy()
+    data=np.column_stack((plot_x, burgers))
+    with open('output.txt', 'a') as f:
+        np.savetxt(f,data)
 
 if __name__=='__main__':
     main()
