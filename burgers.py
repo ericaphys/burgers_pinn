@@ -35,7 +35,7 @@ def inviscid_burgers(u, du_dx, du_dt):
 
 
 def main():
-    
+    #my device is running an integrated GPU that doesnt behave well with pytorch, therefore i turned it off
     device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
     if device=='xpu':
         device='cpu'
