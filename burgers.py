@@ -119,8 +119,19 @@ def main():
     plot_x=[]
     loss_final=[]
     phy_loss_final=[]
+    current_current_loss=0
+    zero_epoch=0
     for epoch in range(epochs):
         if(epoch<10000):
+            if(epoch>=2500 and epoch<5000):
+                lambda_data=100.0
+                lambda_phy=1.0
+            elif(epoch>=5000 and epoch<10000):
+                lambda_data=10.0
+                lambda_phy=100.0
+            else:
+                lambda_data=1.0
+                lambda_phy=1000.0
             for x_batch, u_batch in train_dl:
                 optimizer.zero_grad()
                 u_batch=u_batch.reshape(-1,1)
@@ -154,6 +165,8 @@ def main():
             def closure():
                 optimizer2.zero_grad()
                 pred=model(x_t)
+                lambda_data=1.0
+                lambda_phy=1000.0
                 mask=~torch.isnan(u.squeeze())
                 if epoch==(epochs-1):
                     burgers.append(pred[~mask].detach().cpu())
@@ -172,7 +185,7 @@ def main():
                 du_dt=du_dt[~mask]
                 pred=pred.squeeze()
                 phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
-                lambda_data=1000.0
+                #lambda_data=1000.0
                 #print(f'{loss}      {loss*lambda_data}')
                 loss=lambda_data*loss+lambda_phy*phy_loss
                 #print(loss)
@@ -185,8 +198,17 @@ def main():
                     loss_final.append(loss)
                     phy_loss_final.append(phy_loss)
                     return loss
-            
-            optimizer2.step(closure)
+            past_loss=current_current_loss
+            current_current_loss=optimizer2.step(closure)
+
+            if(past_loss-current_current_loss<=1e-7):
+                if(zero_epoch==epoch-1):
+                    print("Loss has not been updated for two consecutive epochs")
+                    break
+                else:
+                    zero_epoch=epoch
+                
+                
             
             losses[epoch] += loss_final[0]*u.size(0)
             p_losses[epoch] += phy_loss_final[0]*u.size(0)
