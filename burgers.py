@@ -46,7 +46,7 @@ def main():
     #initializing data for the MLP
     rng=np.random.RandomState(123)
     #initial conditions 50 xi for t=0 where u(x,0)=sin(pi*x)
-    Ni=50
+    Ni=60
     x_t_in=np.zeros((Ni,2))
     x_t_in[:,0]=rng.uniform(-1,1,size=Ni)
     x_t_in[:,1]=0
@@ -55,7 +55,7 @@ def main():
     
 
     #boundary conditions 25 ti for x=-1 and 25 ti for x=1
-    Nb=25
+    Nb=30
     x_t_bound_dx=np.zeros((Nb,2))
     x_t_bound_sx=np.zeros((Nb,2))
     x_t_bound_dx[:,1]=rng.uniform(0,1 ,size=Nb).astype(np.float32)
@@ -67,7 +67,7 @@ def main():
     
 
     #initialization of N random tuples (x,t) normally distributed
-    N=10000
+    N=8000
     x_t_tuple=np.zeros((N,2), dtype=np.float32)
     x_t_tuple[:,0]=rng.uniform(-1,1,size=N)
     x_t_tuple[:,1]=rng.uniform(0,1,size=N)
@@ -85,18 +85,21 @@ def main():
     print(u_tuple.shape)
     u=np.concatenate([u_in_bound, u_tuple])
 
-    #pytorching
-    x_t=torch.from_numpy(x_t.astype(np.float32)).requires_grad_()
-    u=torch.from_numpy(u.astype(np.float32)).requires_grad_()
+    #pytorching and loading data in device to use it later for optimizer L-BFGS
+    x_t=torch.from_numpy(x_t.astype(np.float32))
+    x_t=x_t.to(device).requires_grad_()
+    u=torch.from_numpy(u.astype(np.float32))
+    u=u.to(device).requires_grad_()
 
     train_ds=TensorDataset(x_t, u)
     torch.manual_seed(1)
     batch_size=100
     train_dl=DataLoader(train_ds, batch_size,shuffle=True)
     input_size=2
-    hidden_size=100
+    #changed from 100 to 20 to match the paper i found
+    hidden_size=20
     eta=0.001
-    epochs=10000
+    epochs=20000
 
     model=Model(input_size, hidden_size)
     model.to(device)
@@ -104,48 +107,91 @@ def main():
     loss_fn=nn.MSELoss()
 
     optimizer=torch.optim.Adam(model.parameters(), lr=eta)
-    optimizer2=torch.optim.LBFGS(model.parameters(), lr=eta, max_iter=20)
+    optimizer2=torch.optim.LBFGS(model.parameters(), lr=0.1, max_iter=20, history_size=20, line_search_fn='strong_wolfe')
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
 
     #-----MLP-----
     losses=np.zeros(epochs, dtype=np.float32)
-    lambda_data=1000.0
+    lambda_data=100.0
     lambda_phy=1.0
     p_losses=np.zeros(epochs, dtype=np.float32)
     burgers=[]
     plot_x=[]
+    loss_final=[]
+    phy_loss_final=[]
     for epoch in range(epochs):
-        for x_batch, u_batch in train_dl:
-            optimizer.zero_grad()
-            u_batch=u_batch.reshape(-1,1)
-            x_batch, u_batch = x_batch.to(device).requires_grad_(), u_batch.to(device)
-            pred=model(x_batch)
-            
-            #nan mask -> using it returns true where there isnt a nan in u_batch
-            mask=~torch.isnan(u_batch.squeeze())
-            if epoch==(epochs-1):
-                burgers.append(pred[~mask].detach().cpu())
-                plot_x.append(x_batch[~mask].detach().cpu())
-            if mask.any():
-                loss=loss_fn(pred[mask], u_batch[mask])
-            else:
-                loss=torch.tensor(0.0, device=device)
-            
-            #---- automatic differentiation ----
-            derivatives = torch.autograd.grad(pred, x_batch, grad_outputs=torch.ones_like(pred),  create_graph=True)[0]
-            du_dx=derivatives[:,0]
-            du_dx=du_dx[~mask]
-            du_dt=derivatives[:,1]
-            du_dt=du_dt[~mask]
-            pred=pred.squeeze()
-            phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
-            loss=lambda_data*loss+lambda_phy*phy_loss
-            
-            loss.backward()
-            optimizer.step()
+        if(epoch<10000):
+            for x_batch, u_batch in train_dl:
+                optimizer.zero_grad()
+                u_batch=u_batch.reshape(-1,1)
+                x_batch, u_batch = x_batch.to(device).requires_grad_(), u_batch.to(device)
+                pred=model(x_batch)
+                
+                #nan mask -> using it returns true where there isnt a nan in u_batch
+                mask=~torch.isnan(u_batch.squeeze())
+                if mask.any():
+                    loss=loss_fn(pred[mask], u_batch[mask])
+                else:
+                    loss=torch.tensor(0.0, device=device)
+                
+                #---- automatic differentiation ----
+                derivatives = torch.autograd.grad(pred, x_batch, grad_outputs=torch.ones_like(pred),  create_graph=True)[0]
+                du_dx=derivatives[:,0]
+                du_dx=du_dx[~mask]
+                du_dt=derivatives[:,1]
+                du_dt=du_dt[~mask]
+                pred=pred.squeeze()
+                phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
+                loss=lambda_data*loss+lambda_phy*phy_loss
+                
+                loss.backward()
+                optimizer.step()
 
-            losses[epoch] += loss.item()*u_batch.size(0)
-            p_losses[epoch] += phy_loss.item()*u_batch.size(0)
+                losses[epoch] += loss.item()*u_batch.size(0)
+                p_losses[epoch] += phy_loss.item()*u_batch.size(0)
+
+        else:
+            def closure():
+                optimizer2.zero_grad()
+                pred=model(x_t)
+                mask=~torch.isnan(u.squeeze())
+                if epoch==(epochs-1):
+                    burgers.append(pred[~mask].detach().cpu())
+                    plot_x.append(x_t[~mask].detach().cpu())
+                if mask.any():
+
+                    loss=loss_fn(pred[mask].squeeze(), u[mask].squeeze())
+                    
+                else:
+                    loss=torch.tensor(0.0, device=device)
+
+                derivatives = torch.autograd.grad(pred, x_t, grad_outputs=torch.ones_like(pred),  create_graph=True)[0]
+                du_dx=derivatives[:,0]
+                du_dx=du_dx[~mask]
+                du_dt=derivatives[:,1]
+                du_dt=du_dt[~mask]
+                pred=pred.squeeze()
+                phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
+                lambda_data=1000.0
+                #print(f'{loss}      {loss*lambda_data}')
+                loss=lambda_data*loss+lambda_phy*phy_loss
+                #print(loss)
+                loss.backward()
+                if(np.abs(loss.item())>10000 or torch.isnan(loss)):
+                    print(f"Game over, loss: {loss.item()}")
+                    return loss
+                else:
+                    loss_final.append(loss)
+                    phy_loss_final.append(phy_loss)
+                    return loss
+            
+            optimizer2.step(closure)
+            
+            losses[epoch] += loss_final[0]*u.size(0)
+            p_losses[epoch] += phy_loss_final[0]*u.size(0)
+            loss_final=[]
+            phy_loss_final=[]
+            
         losses[epoch] /= len(train_dl.dataset)
         p_losses[epoch] /= len(train_dl.dataset)
         print(f"Epoch: {epoch+1}/{epochs}\ntot loss : {losses[epoch]:.5f}\n phys loss : {p_losses[epoch]:.5f}\n----------------------------\n")
