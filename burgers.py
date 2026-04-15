@@ -236,10 +236,11 @@ def main():
 
     plt.close(fig)
     
-    
+    '''
     data=np.column_stack((plot_x[:,0], burgers))
     with open('output.txt', 'a') as f:
         np.savetxt(f,data)
-
+    '''
+    
 if __name__=='__main__':
     main()
