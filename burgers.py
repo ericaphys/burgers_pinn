@@ -177,6 +177,7 @@ def main():
                 loss=lambda_data*loss+lambda_phy*phy_loss
                 #print(loss)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
                 if(np.abs(loss.item())>10000 or torch.isnan(loss)):
                     print(f"Game over, loss: {loss.item()}")
                     return loss
