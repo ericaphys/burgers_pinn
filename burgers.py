@@ -112,7 +112,7 @@ def main():
 
     #-----MLP-----
     losses=np.zeros(epochs, dtype=np.float32)
-    lambda_data=100.0
+    lambda_data=1000.0
     lambda_phy=1.0
     p_losses=np.zeros(epochs, dtype=np.float32)
     burgers=[]
@@ -121,6 +121,7 @@ def main():
     phy_loss_final=[]
     current_current_loss=0
     zero_epoch=0
+    stop_training=False
     for epoch in range(epochs):
         if(epoch<10000):
             if(epoch>=2500 and epoch<5000):
@@ -129,6 +130,9 @@ def main():
             elif(epoch>=5000 and epoch<10000):
                 lambda_data=10.0
                 lambda_phy=100.0
+            elif(epoch<2500):
+                lambda_data=1000.0
+                lambda_phy=1.0
             else:
                 lambda_data=1.0
                 lambda_phy=1000.0
@@ -165,8 +169,7 @@ def main():
             def closure():
                 optimizer2.zero_grad()
                 pred=model(x_t)
-                lambda_data=1.0
-                lambda_phy=1000.0
+                
                 mask=~torch.isnan(u.squeeze())
                 if epoch==(epochs-1):
                     burgers.append(pred[~mask].detach().cpu())
@@ -200,11 +203,14 @@ def main():
                     return loss
             past_loss=current_current_loss
             current_current_loss=optimizer2.step(closure)
-
+            pred=model(x_t)
+            mask=~torch.isnan(u.squeeze())
             if(past_loss-current_current_loss<=1e-7):
                 if(zero_epoch==epoch-1):
                     print("Loss has not been updated for two consecutive epochs")
-                    break
+                    stop_training = True
+                    burgers.append(pred[~mask].detach().cpu())
+                    plot_x.append(x_t[~mask].detach().cpu())
                 else:
                     zero_epoch=epoch
                 
@@ -217,8 +223,13 @@ def main():
             
         losses[epoch] /= len(train_dl.dataset)
         p_losses[epoch] /= len(train_dl.dataset)
+        
         print(f"Epoch: {epoch+1}/{epochs}\ntot loss : {losses[epoch]:.5f}\n phys loss : {p_losses[epoch]:.5f}\n----------------------------\n")
         scheduler.step()
+
+        if stop_training:
+            break
+        
 
     burgers=torch.cat(burgers).numpy()
     plot_x=torch.cat(plot_x).numpy()
