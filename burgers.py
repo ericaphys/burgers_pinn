@@ -33,6 +33,11 @@ def inviscid_burgers(u, du_dx, du_dt):
     residual=du_dt+u*du_dx
     return (residual**2).mean()
 
+def visc_burgers(u, du_dx, du_dt, d2u_dx2):
+    eta=0.01
+    residual=du_dt+u*du_dx-eta*d2u_dx2
+    return (residual**2).mean()
+
 
 def main():
     #my device is running an integrated GPU that doesnt behave well with pytorch, therefore i turned it off
