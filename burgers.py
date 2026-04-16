@@ -255,7 +255,7 @@ def main():
     frames=50
     time_steps=np.linspace(0,1,frames)
     #tolerance for t value
-    tol=1/frames
+    tol=(time_steps[1] - time_steps[0]) / 2
 
     fig, ax=plt.subplots()
     line, =ax.plot([],[], lw=2)
