@@ -164,8 +164,8 @@ def main():
                 d2u_dx2=second_derivatives[:,0]
                 d2u_dx2=d2u_dx2[~mask]
                 pred=pred.squeeze()
-                #phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
-                phy_loss=visc_burgers(pred[~mask], du_dx, du_dt, d2u_dx2)
+                phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
+                #phy_loss=visc_burgers(pred[~mask], du_dx, du_dt, d2u_dx2)
                 loss=lambda_data*loss+lambda_phy*phy_loss
                 
                 loss.backward()
@@ -199,8 +199,8 @@ def main():
                 d2u_dx2=second_derivatives[:,0]
                 d2u_dx2=d2u_dx2[~mask]
                 pred=pred.squeeze()
-                #phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
-                phy_loss=visc_burgers(pred[~mask], du_dx, du_dt, d2u_dx2)
+                phy_loss=inviscid_burgers(pred[~mask], du_dx, du_dt)
+                #phy_loss=visc_burgers(pred[~mask], du_dx, du_dt, d2u_dx2)
                 #lambda_data=1000.0
                 #print(f'{loss}      {loss*lambda_data}')
                 loss=lambda_data*loss+lambda_phy*phy_loss
