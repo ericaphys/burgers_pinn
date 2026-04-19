@@ -21,9 +21,9 @@ class Model(nn.Module):
 
     def forward(self, x):
         x=torch.tanh(self.layer1(x))
-        x=self.layer2(x)
+        #x=self.layer2(x)
         x=torch.tanh(self.layer2(x))
-        x=self.layer3(x)
+        #x=self.layer3(x)
         x=torch.tanh(self.layer3(x))
         x=self.layer4(x)
 
